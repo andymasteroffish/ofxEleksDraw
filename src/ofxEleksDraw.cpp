@@ -13,8 +13,8 @@ void ofxEleksDraw::setup(){
     pressure = 70;
     circle_resolution = 50;
     
-    plotter_x_limit = 80;
-    plotter_y_limit = 80;
+    plotter_x_limit = 50;// 80;
+    plotter_y_limit = 50;//80;
     
     clip.setup(ofVec2f(0, 0), ofVec2f(ofGetWidth(), ofGetHeight()));
     
@@ -31,14 +31,94 @@ void ofxEleksDraw::clear(){
     ofDrawRectangle(0, 0, fbo.getWidth(), fbo.getHeight());
     fbo.end();
     
+    list.clear();
+    
+    last_x = -9999;
+    last_y = -9999;
+    last_speed = -9999;
+    last_pressure = -9999;
+    
     commands.clear();
+}
+
+void ofxEleksDraw::draw(){
+    //ofSetColor(255);
+    //fbo.draw(0,0);
+    
+    if (list.size() > 1){
+        float prev_x = list[0].x;
+        float prev_y = list[0].y;
+        float prev_speed = list[0].speed;
+        float prev_pressure = list[0].pressure;
+        for (int i=0; i<list.size(); i++){
+            GCodePoint pnt = list[i];
+            if (pnt.pressure == 0){
+                ofSetColor(255, 0,0, 60);
+            }else{
+                float speed_prc = ofMap(speed, 1000, max_speed, 1, 0);  //setting an arbitrary min
+                speed_prc = powf(speed_prc, 0.5);                       //smoothing this out since a medium speed still looks pretty black
+                ofSetColor(0, speed_prc * 255);
+            }
+            
+            //won't be able to see dots if we're drawing lines
+            bool is_dot = prev_x == pnt.x && prev_y == pnt.y && pnt.pressure > 0;
+            
+            if (!is_dot){
+                ofDrawLine(prev_x, prev_y, pnt.x, pnt.y);
+            }else{
+                ofDrawCircle(pnt.x, pnt.y, 1);
+            }
+            
+            prev_x = pnt.x;
+            prev_y = pnt.y;
+            prev_speed = pnt.speed;
+            prev_pressure = pnt.pressure;
+        }
+    }
+}
+
+void ofxEleksDraw::generate_gcode(){
+    commands.clear();
+    
+    commands.push_back("M3 S0");
+    commands.push_back("G0 X0 Y0");
+    
+    ofVec2f prev_pnt = ofVec2f(0,0);
+    float prev_speed = max_speed;
+    float prev_pressure = 0;
+    
+    for (int i=0; i<list.size(); i++){
+        GCodePoint pnt = list[i];
+        ofVec2f plotter_pos = screen_point_to_plotter(list[i].x,list[i].y);
+        
+        if (pnt.pressure != prev_pressure){
+            commands.push_back("M3 S"+ofToString(pnt.pressure));
+        }
+        
+        //if pen is up, go as fast as possible
+        if (pnt.pressure == 0){
+            commands.push_back("G0 X"+ofToString(plotter_pos.x)+" Y"+ofToString(plotter_pos.y) );
+        }
+        //otherwise move at the specified speed
+        else{
+            commands.push_back("G1 X"+ofToString(plotter_pos.x)+" Y"+ofToString(plotter_pos.y) +" F"+ofToString(pnt.speed));
+        }
+        
+        prev_pnt.set(plotter_pos);
+        prev_speed = pnt.speed;
+        prev_pressure = pnt.pressure;
+    }
+    
+    //add some closing steps
     commands.push_back("M3 S0");
     commands.push_back("G0 X0 Y0");
 }
 
-void ofxEleksDraw::draw(){
-    ofSetColor(255);
-    fbo.draw(0,0);
+ofVec2f ofxEleksDraw::screen_point_to_plotter(float x, float y){
+    ofVec2f val(0,0);
+    val.x = ofMap(x,0,ofGetWidth(), -plotter_x_limit, plotter_x_limit);
+    val.y = ofMap(y,0,ofGetWidth(), plotter_y_limit, -plotter_y_limit);
+    return val;
 }
 
 void ofxEleksDraw::print(){
@@ -47,16 +127,14 @@ void ofxEleksDraw::print(){
     }
 }
 
+
+
 void ofxEleksDraw::save(string name){
     ofFile myTextFile;
-    myTextFile.open(name+".nc",ofFile::WriteOnly);
-    //myTextFile << "some text";
+    myTextFile.open(name,ofFile::WriteOnly);
     for (int i=0; i<commands.size(); i++){
         myTextFile<<commands[i]<<endl;
     }
-    //add some closing steps
-    myTextFile<<"M3 S0"<<endl;
-    myTextFile<<"G0 X0 Y0"<<endl;
     
     cout<<"SAVED"<<endl;
 }
@@ -70,7 +148,7 @@ void ofxEleksDraw::set_pressure(float val){
 }
 void ofxEleksDraw::set_speed(float val){
     if (val < 1 || val > max_speed){
-        cout<<"speed shuld be between 1 and "<<max_speed<<endl;
+        cout<<"speed should be between 1 and "<<max_speed<<endl;
         return;
     }
     speed = val;
@@ -84,7 +162,6 @@ void ofxEleksDraw::rect(float x, float y, float w, float h){
 }
 
 void ofxEleksDraw::circle(float x, float y, float size){
-    //vector<ofVec2f> pnts;
     float angle_step =(TWO_PI/(float)circle_resolution);
     start_shape();
     for (int i=0; i<circle_resolution; i++){
@@ -94,10 +171,8 @@ void ofxEleksDraw::circle(float x, float y, float size){
         pnt.x = x + sin(angle) * size;
         pnt.y = y + cos(angle) * size;
         vertex(pnt.x, pnt.y);
-        //pnts.push_back(pnt);
     }
     end_shape(true);
-    //shape(pnts, true);
 }
 
 void ofxEleksDraw::start_shape(){
@@ -136,20 +211,12 @@ void ofxEleksDraw::line(float x1, float y1, float x2, float y2, bool lift_pen){
     ofDrawLine(p1.x, p1.y, p2.x, p2.y);
     fbo.end();
     
-    p1.x = ofMap(p1.x,0,ofGetWidth(), -plotter_x_limit, plotter_x_limit);
-    p1.y = ofMap(p1.y,0,ofGetWidth(), plotter_y_limit, -plotter_y_limit);
-    p2.x = ofMap(p2.x,0,ofGetWidth(), -plotter_x_limit, plotter_x_limit);
-    p2.y = ofMap(p2.y,0,ofGetWidth(), plotter_y_limit, -plotter_y_limit);
-    
     if (lift_pen){
-        commands.push_back("M3 S0");
-        commands.push_back("G0 X"+ofToString(p1.x)+" Y"+ofToString(p1.y) );
+        point(p1.x, p1.y, speed, 0);
     }else{
-        commands.push_back("G1 X"+ofToString(p1.x)+" Y"+ofToString(p1.y) +" F"+ofToString(speed) );
+        point(p1.x, p1.y, speed, pressure);
     }
-    commands.push_back("M3 S"+ofToString(pressure));
-    commands.push_back("G1 X"+ofToString(p2.x)+" Y"+ofToString(p2.y) +" F"+ofToString(speed));
-    
+    point(p2.x, p2.y, speed, pressure);
 }
 
 void ofxEleksDraw::dot(float x, float y){
@@ -164,13 +231,28 @@ void ofxEleksDraw::dot(float x, float y){
     ofDrawCircle(pnt.x, pnt.y, 1);
     fbo.end();
     
-    pnt.x = ofMap(pnt.x,0,ofGetWidth(), -plotter_x_limit, plotter_x_limit);
-    pnt.y = ofMap(pnt.y,0,ofGetWidth(), plotter_y_limit, -plotter_y_limit);
+    //transit line
+    point(x, y, speed, 0);
+    //drop the pen
+    point(x, y, speed, pressure);
     
-    commands.push_back("M3 S0");
-    commands.push_back("G0 X"+ofToString(pnt.x)+" Y"+ofToString(pnt.y) );
-    commands.push_back("M3 S"+ofToString(pressure));
-    commands.push_back("M3 S0");
+}
+
+void ofxEleksDraw::point(float x, float y, float speed, float pressure){
+    
+    if (x == last_x && y == last_y && last_speed == speed && last_pressure == pressure ) {
+        //cout<<"same point as last. ignored. "<<x<<","<<y<<endl;
+        return;
+    }
+    last_x = x;
+    last_y = y;
+    last_speed = speed;
+    last_pressure = pressure;
+    
+    //cout<<"adding at "<<x<<","<<y<<endl;
+    
+    GCodePoint pnt = GCodePoint(x,y,speed,pressure);
+    list.push_back(pnt);
 }
 
 
@@ -241,3 +323,93 @@ ofVec2f ofxEleksDraw::getModelPoint(float x, float y){
     
     return return_val;
 }
+
+//this is not perfect yet. Some of the resulting order is deifnitely not as efficient as it could be
+void ofxEleksDraw::sort(){
+    vector<GCodePoint> destination;
+    destination.clear();
+    vector<GCodePoint> src(list);    //clones the vector
+    
+    //in my ofxVST port, these were called frames
+    GCodePoint lastFrame = GCodePoint(1024, 1024, 0, 0);
+    GCodePoint nearestFrame = lastFrame;
+    
+    while (src.size() != 0) {
+        int startIndex = 0;
+        int endIndex = 0;
+        float nearestDistance = 100000;
+        int i = 0;
+        bool reverseOrder = false;
+        
+        while (i < src.size()) {
+            int j = i;
+            while (j < src.size() - 1 && src[j + 1].pressure > 0) {
+                j++;
+            }
+            
+            GCodePoint startFrame = src[i];
+            GCodePoint endFrame = src[j];    // j = index of inclusive right boundary
+            float startDistance = ofDist(lastFrame.x, lastFrame.y, startFrame.x, startFrame.y);
+            float endDistance = ofDist(lastFrame.x, lastFrame.y, endFrame.x, endFrame.y);
+            
+            if (startDistance < nearestDistance) {
+                startIndex = i;
+                endIndex = j;
+                nearestDistance = startDistance;
+                nearestFrame = startFrame;
+                //cout<<"less "<<i<<"  "<<j<<endl;
+            }
+            if (!startFrame.equals(endFrame) && endDistance < nearestDistance) {
+                startIndex = i;
+                endIndex = j;
+                nearestDistance = endDistance;
+                nearestFrame = endFrame;
+                reverseOrder = true;
+                //cout<<"same"<<endl;
+            }
+            i = j + 1;
+        }
+        
+        //reverseOrder = false;   //andy edit
+        GCodePoint startFrame = src[startIndex];
+        GCodePoint endFrame = src[endIndex];
+        
+        if (reverseOrder) {
+            // Swap commands of first and last segment if in reverse order
+            // THIS NEEDED TO BE POINTERS to actually change the data
+            GCodePoint * t0 = &src[startIndex];
+            GCodePoint * t1 = &src[endIndex];
+            int temp_pressure = t0->pressure;
+            int temp_speed = t0->speed;
+            t0->pressure = t1->pressure;
+            t0->speed = t1->speed;
+            t1->pressure = temp_pressure;
+            t1->speed = temp_speed;
+            
+            lastFrame = startFrame;
+            for (int index = endIndex; index >= startIndex; index--) {
+                destination.push_back(src[index]);
+            }
+        } else {
+            lastFrame = endFrame;
+            for (int index = startIndex; index <= endIndex; index++) {
+                destination.push_back(src[index]);
+            }
+        }
+        
+        src.erase(src.begin()+startIndex, src.begin()+endIndex + 1);
+    }
+    
+    list.clear();
+    for (int i=0; i<destination.size(); i++){
+        list.push_back(destination[i]);
+    }
+}
+
+
+
+
+
+
+
+

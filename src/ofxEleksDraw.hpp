@@ -8,6 +8,7 @@
 
 #include "ofMain.h"
 #include "Clipping.hpp"
+#include "GCodePoint.h"
 
 class ofxEleksDraw{
 public:
@@ -17,6 +18,8 @@ public:
     
     void draw();
     
+    void generate_gcode();
+    ofVec2f screen_point_to_plotter(float x, float y);
     void print();
     void save(string name);
     
@@ -36,15 +39,18 @@ public:
     
     void dot(float x, float y);
     
+    void point(float x, float y, float speed, float pressure);
     
     ofVec2f getModelPoint(ofVec3f pnt);
     ofVec2f getModelPoint(float x, float y);
+    
+    void sort();
     
     float plotter_x_limit, plotter_y_limit;
     
     float speed;
     float max_speed;
-    float pressure;
+    float pressure; //maybe getting rid of this
     
     int circle_resolution;
     
@@ -55,7 +61,12 @@ public:
     
     Clipping clip;
     
+    int last_x; //TODO: make these floats and check if values are very, very close
+    int last_y;
+    int last_pressure;
+    int last_speed;
     
+    vector<GCodePoint> list;
     
 };
 
