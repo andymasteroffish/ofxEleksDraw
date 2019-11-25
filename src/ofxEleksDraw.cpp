@@ -58,6 +58,10 @@ void ofxEleksDraw::draw(){
                 float speed_prc = ofMap(speed, 1000, max_speed, 1, 0);  //setting an arbitrary min
                 speed_prc = powf(speed_prc, 0.5);                       //smoothing this out since a medium speed still looks pretty black
                 ofSetColor(0, speed_prc * 255);
+                
+                //testing
+                float prc = (float)i/(float)list.size();
+                ofSetColor(0, 255.0*(1.0-prc), 255*prc);
             }
             
             //won't be able to see dots if we're drawing lines
@@ -331,7 +335,7 @@ void ofxEleksDraw::sort(){
     vector<GCodePoint> src(list);    //clones the vector
     
     //in my ofxVST port, these were called frames
-    GCodePoint lastFrame = GCodePoint(1024, 1024, 0, 0);
+    GCodePoint lastFrame = GCodePoint(9999, 9999, 0, 0);
     GCodePoint nearestFrame = lastFrame;
     
     while (src.size() != 0) {
@@ -347,6 +351,8 @@ void ofxEleksDraw::sort(){
                 j++;
             }
             
+            //cout<<"go from "<<i<<" to "<<j<<endl;
+            
             GCodePoint startFrame = src[i];
             GCodePoint endFrame = src[j];    // j = index of inclusive right boundary
             float startDistance = ofDist(lastFrame.x, lastFrame.y, startFrame.x, startFrame.y);
@@ -357,6 +363,7 @@ void ofxEleksDraw::sort(){
                 endIndex = j;
                 nearestDistance = startDistance;
                 nearestFrame = startFrame;
+                reverseOrder = false;       //if this fixes it, add it to your vector code
                 //cout<<"less "<<i<<"  "<<j<<endl;
             }
             if (!startFrame.equals(endFrame) && endDistance < nearestDistance) {
@@ -365,16 +372,22 @@ void ofxEleksDraw::sort(){
                 nearestDistance = endDistance;
                 nearestFrame = endFrame;
                 reverseOrder = true;
-                //cout<<"same"<<endl;
+                
+                
             }
             i = j + 1;
+            //cout<<"i is now "<<i<<endl;
         }
+        
+        //cout<<"start index "<<startIndex<<"  end index "<<endIndex<<endl;
+        
         
         //reverseOrder = false;   //andy edit
         GCodePoint startFrame = src[startIndex];
         GCodePoint endFrame = src[endIndex];
         
         if (reverseOrder) {
+            //cout<<"reverse this one"<<endl;
             // Swap commands of first and last segment if in reverse order
             // THIS NEEDED TO BE POINTERS to actually change the data
             GCodePoint * t0 = &src[startIndex];
@@ -388,14 +401,18 @@ void ofxEleksDraw::sort(){
             
             lastFrame = startFrame;
             for (int index = endIndex; index >= startIndex; index--) {
+                //cout<<"add reverse point "<<src[index].x<<","<<src[index].y<<endl;
                 destination.push_back(src[index]);
             }
         } else {
             lastFrame = endFrame;
             for (int index = startIndex; index <= endIndex; index++) {
+                //cout<<"add point "<<src[index].x<<","<<src[index].y<<endl;
                 destination.push_back(src[index]);
             }
         }
+        
+        //cout<<"last frame  x: "<<lastFrame.x<<" y: "<<lastFrame.y<<endl;
         
         src.erase(src.begin()+startIndex, src.begin()+endIndex + 1);
     }
@@ -406,6 +423,17 @@ void ofxEleksDraw::sort(){
     }
 }
 
+float ofxEleksDraw::measureTransitDistance(){
+    float distance = 0.0;
+    GCodePoint last = GCodePoint(0, 0, 0, 0);
+    for (GCodePoint f : list) {
+        if (f.pressure == 0){
+            distance += ofDist(f.x, f.y, last.x, last.y);
+        }
+        last = f;
+    }
+    return distance;
+}
 
 
 

@@ -3,6 +3,9 @@
 //  Created by Andrew Wallace on 11/7/19.
 //
 
+//A fair chunk of code in this project was ported from the Processing VST library by Trammell Hudson
+//https://github.com/osresearch/vst
+
 #ifndef ofxEleksDraw_hpp
 #define ofxEleksDraw_hpp
 
@@ -45,6 +48,9 @@ public:
     ofVec2f getModelPoint(float x, float y);
     
     void sort();
+    
+    float measureTransitDistance();
+    
     
     float plotter_x_limit, plotter_y_limit;
     
