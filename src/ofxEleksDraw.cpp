@@ -21,6 +21,8 @@ void ofxEleksDraw::setup(){
     fbo.allocate(ofGetWidth(), ofGetHeight(), GL_RGBA);
     
     clear();
+    
+    debug_show_point_numbers = false;
 }
 
 void ofxEleksDraw::clear(){
@@ -73,6 +75,17 @@ void ofxEleksDraw::draw(){
                 ofDrawCircle(pnt.x, pnt.y, 1);
             }
             
+            //testing
+            if (debug_show_point_numbers){
+                 if (pnt.pressure == 0){
+                     ofSetColor(255,0,0);
+                 }else{
+                     ofSetColor(0);
+                 }
+                //ofDrawBitmapString(ofToString(i), (pnt.x+prev_x)/2.0, (pnt.y+prev_y)/2.0);
+                ofDrawBitmapString(ofToString(i), pnt.x, pnt.y-((float)i*2));// - i*10);
+            }
+            
             prev_x = pnt.x;
             prev_y = pnt.y;
             prev_speed = pnt.speed;
@@ -116,6 +129,8 @@ void ofxEleksDraw::generate_gcode(){
     //add some closing steps
     commands.push_back("M3 S0");
     commands.push_back("G0 X0 Y0");
+    
+    cout<<"transit distance: "<<measureTransitDistance()<<endl;
 }
 
 ofVec2f ofxEleksDraw::screen_point_to_plotter(float x, float y){
@@ -203,7 +218,7 @@ void ofxEleksDraw::line(float x1, float y1, float x2, float y2, bool lift_pen){
     ofVec2f p2 = getModelPoint(x2,y2);
     
     if (!clip.clip(p1, p2)) {
-        //cout<<"no part of this line is on screen"<<endl;
+        cout<<"no part of this line is on screen"<<endl;
         return;
     }
     
@@ -421,6 +436,183 @@ void ofxEleksDraw::sort(){
     for (int i=0; i<destination.size(); i++){
         list.push_back(destination[i]);
     }
+}
+
+//trying to go thorugh and find lines that secretly connect
+//TODO: have it consider speed
+void ofxEleksDraw::simplify(float max_dist_to_combine_points){
+    float max_dist_sq = powf(max_dist_to_combine_points, 2);
+    int test_count = 0;
+//    cout<<"--start list--"<<endl;
+//    for (int i=0; i<list.size(); i++){
+//        cout<<i<<":"<<list[i].x<<","<<list[i].y<<"  "<<list[i].pressure<<endl;
+//    }
+    
+    vector<GCodePoint> destination;
+    destination.clear();
+    vector<GCodePoint> src(list);
+    
+    int start_id = 0;
+    
+    //pulling out all multi-line segments (like rectanges) because I don't want to think about how to test them just yet
+    while (start_id < src.size()-1){
+        int end_id = start_id;
+        while (end_id < src.size()-1 && src[end_id+1].pressure > 0){
+            end_id++;
+        }
+        
+        //cout<<"from "<<start_id<<" to "<<end_id<<endl;
+        
+        //multiline segments should just be added to the final list.
+        if (end_id > start_id+1){
+            for (int index = start_id; index <= end_id; index++) {
+                //cout<<"add point "<<src[index].x<<","<<src[index].y<<endl;
+                destination.push_back(src[index]);
+            }
+            src.erase(src.begin()+start_id, src.begin()+end_id + 1);
+            cout<<"found a multiline starting at "<<start_id<<endl;
+        }
+        //keep single line segments in src
+        else{
+            start_id = end_id+1;
+        }
+    }
+    
+    
+    for (int index = 0; index<src.size(); index++){
+        //cout<<"index "<<index<<endl;
+        GCodePoint pnt_a = src[index];
+        
+    
+       
+        for (int k=index+1; k<src.size(); k++){
+            //cout<<" k "<<k<<endl;
+            GCodePoint pnt_b = src[k];
+            //cout<<"check "<<pnt_a.x<<","<<pnt_a.y<<"  against  "<<pnt_b.x<<","<<pnt_b.y<<endl;
+            
+            
+            if (ofDistSquared(pnt_a.x, pnt_a.y, pnt_b.x, pnt_b.y) <= max_dist_sq){
+            
+            //if (pnt_a.equals_pos_only(pnt_b)){
+                //cout<<"match at "<<pnt_b.x<<","<<pnt_b.y<<endl;
+                //cout<<"match "<<index<<" and "<<k<<endl;
+                
+                //style 1
+                //if A is a pen down move and B is pen up, then we can just nix B and bring its next point over
+                if (pnt_a.pressure > 0 && pnt_b.pressure == 0){
+                    GCodePoint end_pnt = src[k+1];
+                    cout<<"connect style(1) "<<end_pnt.x<<","<<end_pnt.y<<endl;
+                    
+                    //add the sequence to destination
+                    if (index-1 < 0)    cout<<"BIG TROUBLE!!"<<endl;
+                    destination.push_back( src[index-1] );
+                    destination.push_back(pnt_a);
+                    destination.push_back(end_pnt);
+
+                    //remove both segments
+                    src.erase(src.begin()+k, src.begin()+k+2);
+                    src.erase(src.begin()+index-1, src.begin()+index+1);
+                    //put the down segment back directly after index
+                    //src.insert(src.begin()+index+1, end_pnt);
+                    
+                    test_count++;
+                    break;
+                }
+                
+                //style 2
+                //if A is pen up and B is also pen up
+                if (pnt_a.pressure == 0 && pnt_b.pressure == 0){
+                    cout<<"connect style 2"<<endl;
+                    
+                    //flip the first line segment
+                    int next_index = index+1;
+                    GCodePoint * t0 = &src[index];
+                    GCodePoint * t1 = &src[next_index];
+                    int temp_x = t0->x;
+                    int temp_y = t0->y;
+                    t0->x = t1->x;
+                    t0->y = t1->y;
+                    t1->x = temp_x;
+                    t1->y = temp_y;
+                    
+                    //in the next sweep this should be caught as a style 1
+                    //index = 0;
+                    
+                    break;
+                }
+                
+                //style 3
+                //if A is pen down and B is also pen down
+                if (pnt_a.pressure > 0 && pnt_b.pressure > 0){
+                    cout<<"connect style 3 on "<<index<<endl;
+                    
+                    //flip the second line segment
+                    GCodePoint * t0 = &src[k];
+                    GCodePoint * t1 = &src[k-1]; //need to go back since pnt_b is the down position
+                    int temp_x = t0->x;
+                    int temp_y = t0->y;
+                    t0->x = t1->x;
+                    t0->y = t1->y;
+                    t1->x = temp_x;
+                    t1->y = temp_y;
+                    
+                    //need to rewind a bit so that in the next sweep this should be caught as a style 1
+                    index--;
+                    //index = 0;
+                    break;
+                }
+                
+                //style 4
+                //if A is pen up and B is pen down
+                if (pnt_a.pressure == 0 && pnt_b.pressure > 0){
+                    cout<<"conect style 4"<<endl;
+                    
+                    //flip the first line segment
+                    int next_index = index+1;
+                    GCodePoint * t0 = &src[index];
+                    GCodePoint * t1 = &src[next_index];
+                    int temp_x = t0->x;
+                    int temp_y = t0->y;
+                    t0->x = t1->x;
+                    t0->y = t1->y;
+                    t1->x = temp_x;
+                    t1->y = temp_y;
+                    
+                    //flip the second segment
+                    t0 = &src[k];
+                    t1 = &src[k-1];    //need to go back since pnt_b is the down position
+                    temp_x = t0->x;
+                    temp_y = t0->y;
+                    t0->x = t1->x;
+                    t0->y = t1->y;
+                    t1->x = temp_x;
+                    t1->y = temp_y;
+                    
+                    //in the next sweep this should be caught as a style 1
+                    //index = 0;
+                    break;
+                }
+                
+            }
+        }
+        
+    }
+    
+    
+    //add what's left
+    for (int i=0; i<src.size(); i++){
+        destination.push_back(src[i]);
+    }
+    
+    //transfer it over
+    //cout<<"--list--"<<endl;
+    list.clear();
+    for (int i=0; i<destination.size(); i++){
+        //cout<<i<<":"<<destination[i].x<<","<<destination[i].y<<"  "<<destination[i].pressure<<endl;
+        list.push_back(destination[i]);
+    }
+    
+    cout<<"lines simplified: "<<test_count<<endl;
 }
 
 float ofxEleksDraw::measureTransitDistance(){

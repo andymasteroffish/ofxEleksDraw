@@ -48,6 +48,7 @@ public:
     ofVec2f getModelPoint(float x, float y);
     
     void sort();
+    void simplify(float max_dist_to_combine_points = 0);
     
     float measureTransitDistance();
     
@@ -73,6 +74,8 @@ public:
     int last_speed;
     
     vector<GCodePoint> list;
+    
+    bool debug_show_point_numbers;
     
 };
 

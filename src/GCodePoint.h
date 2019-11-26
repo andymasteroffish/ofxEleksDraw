@@ -21,6 +21,10 @@ public:
     bool equals(GCodePoint other){
         return x==other.x && y==other.y && speed==other.speed && pressure==other.pressure;
     }
+    
+    bool equals_pos_only(GCodePoint other){
+        return x==other.x && y==other.y;
+    }
 };
 
 
