@@ -13,8 +13,8 @@ void ofxEleksDraw::setup(){
     pressure = 70;
     circle_resolution = 50;
     
-    plotter_x_limit = 50;// 80;
-    plotter_y_limit = 50;//80;
+    plotter_x_limit = 80;
+    plotter_y_limit = 80;
     
     clip.setup(ofVec2f(0, 0), ofVec2f(ofGetWidth(), ofGetHeight()));
     
