@@ -51,6 +51,7 @@ public:
     
     void sort();
     void simplify(float max_dist_to_combine_points = 0);
+    //void remove_duplicate_points(float max_dist_to_count = 0);
     
     float measureTransitDistance();
     

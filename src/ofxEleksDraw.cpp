@@ -122,13 +122,21 @@ void ofxEleksDraw::generate_gcode(){
             commands.push_back("M3 S"+ofToString(pnt.pressure));
         }
         
+        string move_command = "";
         //if pen is up, go as fast as possible
         if (pnt.pressure == 0){
-            commands.push_back("G0 X"+ofToString(plotter_pos.x)+" Y"+ofToString(plotter_pos.y) );
+            move_command = "G0 X"+ofToString(plotter_pos.x)+" Y"+ofToString(plotter_pos.y) ;
         }
         //otherwise move at the specified speed
         else{
-            commands.push_back("G1 X"+ofToString(plotter_pos.x)+" Y"+ofToString(plotter_pos.y) +" F"+ofToString(pnt.speed));
+            move_command = "G1 X"+ofToString(plotter_pos.x)+" Y"+ofToString(plotter_pos.y) +" F"+ofToString(pnt.speed);
+        }
+        
+        //just make sure that this is not identical to the last one
+        if (move_command != commands[commands.size()-1]){
+            commands.push_back(move_command);
+        }else{
+            cout<<"duplicate: "<<move_command<<endl;
         }
         
         prev_pnt.set(plotter_pos);
@@ -301,14 +309,10 @@ void ofxEleksDraw::text(string text, ofTrueTypeFont * font, float x, float y){
         
         // for every polyline, draw lines
         for (int j = 0; j < polylines.size(); j++){
-            //start_shape();
             for (int k = 0; k < polylines[j].size(); k++){         // draw every "fifth" point
                 int next_id = (k+1) % polylines[j].size();
                 line(polylines[j][k].x,polylines[j][k].y, polylines[j][next_id].x,polylines[j][next_id].y, k==0);
-                cout<<polylines[j][k].x<<endl;
-                //vertex(polylines[j][k].x,polylines[j][k].y);
             }
-            //end_shape(true);
         }
     }
     
@@ -428,8 +432,6 @@ void ofxEleksDraw::sort(){
                 nearestDistance = endDistance;
                 nearestFrame = endFrame;
                 reverseOrder = true;
-                
-                
             }
             i = j + 1;
             //cout<<"i is now "<<i<<endl;
@@ -479,6 +481,10 @@ void ofxEleksDraw::sort(){
     }
 }
 
+//void ofxEleksDrawremove_duplicate_points(float max_dist_to_count = 0){
+//
+//}
+
 //trying to go thorugh and find lines that secretly connect
 //TODO: have it consider speed
 void ofxEleksDraw::simplify(float max_dist_to_combine_points){
@@ -510,6 +516,7 @@ void ofxEleksDraw::simplify(float max_dist_to_combine_points){
                 //cout<<"add point "<<src[index].x<<","<<src[index].y<<endl;
                 destination.push_back(src[index]);
             }
+            //cout<<"start: "<<start_id<<"  end: "<<end_id<<endl;
             src.erase(src.begin()+start_id, src.begin()+end_id + 1);
             cout<<"found a multiline starting at "<<start_id<<endl;
         }
