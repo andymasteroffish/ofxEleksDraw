@@ -10,11 +10,14 @@ void ofxEleksDraw::setup(){
     //set some defaults
     max_speed = 10000;
     speed = 5000;
-    pressure = 70;
+    pressure = 60;
     circle_resolution = 50;
     
     plotter_x_limit = 80;
     plotter_y_limit = 80;
+    
+    show_transit_lines = true;
+    show_path_with_color = true;
     
     clip.setup(ofVec2f(0, 0), ofVec2f(ofGetWidth(), ofGetHeight()));
     
@@ -55,15 +58,22 @@ void ofxEleksDraw::draw(){
         for (int i=0; i<list.size(); i++){
             GCodePoint pnt = list[i];
             if (pnt.pressure == 0){
-                ofSetColor(255, 0,0, 60);
+                if (show_transit_lines){
+                    ofSetColor(255, 0,0, 60);
+                }else{
+                    ofSetColor(255, 0,0, 0);
+                }
+                
             }else{
                 float speed_prc = ofMap(speed, 1000, max_speed, 1, 0);  //setting an arbitrary min
                 speed_prc = powf(speed_prc, 0.5);                       //smoothing this out since a medium speed still looks pretty black
                 ofSetColor(0, speed_prc * 255);
                 
-                //testing
-                float prc = (float)i/(float)list.size();
-                ofSetColor(0, 255.0*(1.0-prc), 255*prc);
+                //faidng between colors to show order
+                if (show_path_with_color){
+                    float prc = (float)i/(float)list.size();
+                    ofSetColor(0, 255.0*(1.0-prc), 255*prc);
+                }
             }
             
             //won't be able to see dots if we're drawing lines
@@ -149,6 +159,7 @@ void ofxEleksDraw::print(){
 
 
 void ofxEleksDraw::save(string name){
+    cout<<"saving "<<commands.size()<<" commands"<<endl;
     ofFile myTextFile;
     myTextFile.open(name,ofFile::WriteOnly);
     for (int i=0; i<commands.size(); i++){
@@ -272,6 +283,36 @@ void ofxEleksDraw::point(float x, float y, float speed, float pressure){
     
     GCodePoint pnt = GCodePoint(x,y,speed,pressure);
     list.push_back(pnt);
+}
+
+//https://openframeworks.cc/documentation/graphics/ofTrueTypeFont/#show_getStringAsPoints
+void ofxEleksDraw::text(string text, ofTrueTypeFont * font, float x, float y){
+    bool vflip = true; // OF flips y coordinate in the default perspective,
+    // should be false if using a camera for example
+    bool filled = false; // or false for contours
+    vector < ofPath > paths = font->getStringAsPoints(text, vflip, filled);
+    
+    ofPushMatrix();
+    ofTranslate(x,y);
+    
+    for (int i = 0; i < paths.size(); i++){
+        // for every character break it out to polylines
+        vector <ofPolyline> polylines = paths[i].getOutline();
+        
+        // for every polyline, draw lines
+        for (int j = 0; j < polylines.size(); j++){
+            //start_shape();
+            for (int k = 0; k < polylines[j].size(); k++){         // draw every "fifth" point
+                int next_id = (k+1) % polylines[j].size();
+                line(polylines[j][k].x,polylines[j][k].y, polylines[j][next_id].x,polylines[j][next_id].y, k==0);
+                cout<<polylines[j][k].x<<endl;
+                //vertex(polylines[j][k].x,polylines[j][k].y);
+            }
+            //end_shape(true);
+        }
+    }
+    
+    ofPopMatrix();
 }
 
 

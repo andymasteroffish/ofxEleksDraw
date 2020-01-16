@@ -44,6 +44,8 @@ public:
     
     void point(float x, float y, float speed, float pressure);
     
+    void text(string text, ofTrueTypeFont * font, float x, float y);
+    
     ofVec2f getModelPoint(ofVec3f pnt);
     ofVec2f getModelPoint(float x, float y);
     
@@ -76,6 +78,10 @@ public:
     vector<GCodePoint> list;
     
     bool debug_show_point_numbers;
+    
+    //showing info
+    bool show_transit_lines;
+    bool show_path_with_color;
     
 };
 
